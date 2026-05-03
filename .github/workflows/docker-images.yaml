@@ -1,0 +1,81 @@
+name: Docker Images CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.on_push.outputs.matrix || steps.on_pull_request.outputs.matrix || steps.on_workflow_dispatch.outputs.matrix }}
+      has_changes: ${{ steps.on_push.outputs.has_changes || steps.on_pull_request.outputs.has_changes || steps.on_workflow_dispatch.outputs.has_changes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect (push)
+        id: on_push
+        if: github.event_name == 'push'
+        run: bash .github/scripts/on_push_detect.sh "${{ github.event.before }}" "${{ github.sha }}"
+
+      - name: Detect (pull_request)
+        id: on_pull_request
+        if: github.event_name == 'pull_request'
+        run: bash .github/scripts/on_pull_request_detect.sh "${{ github.base_ref }}"
+
+      - name: Detect (workflow_dispatch)
+        id: on_workflow_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: bash .github/scripts/on_workflow_dispatch_detect.sh
+
+  # On pull requests: validate each changed Dockerfile without building layers
+  check:
+    needs: detect
+    if: needs.detect.outputs.has_changes == 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.detect.outputs.matrix) }}
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Check ${{ matrix.name }}/Dockerfile
+        run: docker build --check ${{ matrix.name }}
+
+  # On push to main (or manual dispatch): build and publish to GHCR
+  publish:
+    needs: detect
+    if: needs.detect.outputs.has_changes == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix: ${{ fromJson(needs.detect.outputs.matrix) }}
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.name }}:${{ matrix.version }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.name }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ matrix.version }}
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:latest
