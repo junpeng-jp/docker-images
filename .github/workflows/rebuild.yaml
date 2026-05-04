@@ -1,0 +1,56 @@
+name: Rebuild Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_name:
+        description: 'Image to rebuild'
+        required: true
+        type: choice
+        options:
+          - helm
+      ref:
+        description: 'Commit SHA or ref to build from (leave blank for latest main)'
+        required: false
+        default: ''
+      version:
+        description: 'Version override (leave blank to read VERSION file)'
+        required: false
+        default: ''
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || 'main' }}
+
+      - name: Resolve version
+        id: resolve
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION=$(tr -d '[:space:]' < "${{ inputs.image_name }}/VERSION")
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ inputs.image_name }}:${{ steps.resolve.outputs.version }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.image_name }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}:${{ steps.resolve.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}:latest
