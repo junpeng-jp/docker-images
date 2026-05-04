@@ -47,6 +47,8 @@ RUN curl -fsSL "https://github.com/helm/chart-testing/releases/download/v${CT_VE
 # ---- final stage ----
 FROM alpine:3.22.4
 
+ENV HELM_PLUGINS=/usr/local/share/helm/plugins
+
 RUN apk add --no-cache \
     ca-certificates \
     bash \
@@ -56,8 +58,7 @@ RUN apk add --no-cache \
 COPY --from=builder /usr/local/bin/kubectl /usr/local/bin/kubectl
 COPY --from=builder /usr/local/bin/helm    /usr/local/bin/helm
 COPY --from=builder /usr/local/bin/ct      /usr/local/bin/ct
-COPY --from=builder /etc/ct                /etc/ct
-COPY --from=builder /root/.local/share/helm/plugins /root/.local/share/helm/plugins
+COPY --from=builder /root/.local/share/helm/plugins /usr/local/share/helm/plugins
 
 # Verify all tools and plugins are present
 RUN kubectl version --client 
