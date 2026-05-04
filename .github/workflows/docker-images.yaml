@@ -88,6 +88,8 @@ jobs:
         with:
           context: ${{ matrix.name }}
           push: true
+          provenance: mode=min
+          build-summary: false
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ matrix.version }}
             ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:latest
