@@ -60,6 +60,9 @@ COPY --from=builder /usr/local/bin/helm    /usr/local/bin/helm
 COPY --from=builder /usr/local/bin/ct      /usr/local/bin/ct
 COPY --from=builder /root/.local/share/helm/plugins /usr/local/share/helm/plugins
 
+# ct expects a chart_schema.yaml to be in /etc/ct
+COPY --from=builder /etc/ct /etc/ct
+
 # Verify all tools and plugins are present
 RUN kubectl version --client 
 
