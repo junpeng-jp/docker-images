@@ -1,0 +1,11 @@
+suite: configmap tests
+templates:
+  - configmap.yaml
+tests:
+  - it: should render a ConfigMap with the correct replicaCount
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: data.replicaCount
+          value: "1"
