@@ -44,12 +44,11 @@ RUN curl -fsSL "https://github.com/helm/chart-testing/releases/download/v${CT_VE
 
 FROM python:3.10-alpine AS python-builder
 
-RUN pip install --no-cache-dir --user pyyaml yamale yamllint
+RUN pip install --no-cache-dir pyyaml yamale yamllint
 
 FROM alpine:3.22.4
 
 ENV HELM_PLUGINS=/usr/local/share/helm/plugins
-ENV PATH="/root/.local/bin:${PATH}"
 
 RUN apk add --no-cache \
     ca-certificates \
@@ -67,11 +66,12 @@ COPY --from=builder /root/.local/share/helm/plugins /usr/local/share/helm/plugin
 # ct expects a chart_schema.yaml to be in /etc/ct
 COPY --from=builder /etc/ct /etc/ct
 
-# Python 3.10 binary, stdlib, shared library, and user packages
+# Python 3.10 binary, stdlib, shared library, and site-packages
 COPY --from=python-builder /usr/local/bin/python3.10        /usr/local/bin/python3.10
+COPY --from=python-builder /usr/local/bin/yamale            /usr/local/bin/yamale
+COPY --from=python-builder /usr/local/bin/yamllint          /usr/local/bin/yamllint
 COPY --from=python-builder /usr/local/lib/python3.10        /usr/local/lib/python3.10
 COPY --from=python-builder /usr/local/lib/libpython3.10.so.1.0 /usr/local/lib/libpython3.10.so.1.0
-COPY --from=python-builder /root/.local                     /root/.local
 
 RUN ln -sf /usr/local/bin/python3.10 /usr/local/bin/python3 \
     && ln -sf /usr/local/bin/python3.10 /usr/local/bin/python \
@@ -89,8 +89,11 @@ RUN helm version \
 RUN ct version
 
 RUN python3 --version \
-    && python3 -c "import yaml; import yamale; import yamllint; print('Python packages verified')" \
-    && yamllint --version
+    && python3 -c "import yaml; import yamale; import yamllint; print('Python packages verified')"
+
+RUN yamllint --version 
+
+RUN yamale --help 2>&1 | grep -qi "usage\|yamale" && echo "yamale CLI verified"
 
 RUN --mount=type=bind,source=test-chart,target=/tmp/test-chart \
     cp -r /tmp/test-chart /tmp/test-chart-rw \
