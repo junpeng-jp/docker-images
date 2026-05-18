@@ -1,0 +1,84 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+vars:
+  VENV: .venv
+  PYTHON: .venv/bin/python
+  SRC: src
+  TESTS: tests
+  VERSION:
+    sh: grep '^version' pyproject.toml | sed 's/version = "\(.*\)"/\1/'
+  IMAGE: ha-gitops-sidecar:{{.VERSION}}-dev
+  DOCKER:
+    sh: which docker 2>/dev/null || which podman
+  INTEGRATION_DIR: .tmp/integration
+  INTEGRATION_PORT: 18080
+  COMPOSE_FILE: ./docker/dev/docker-compose.yml
+  COMPOSE_PROJECT: ha-gitops-test
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  install:
+    desc: Install dependencies (including dev) via uv
+    cmds:
+      - uv sync
+    sources:
+      - pyproject.toml
+      - uv.lock
+    generates:
+      - "{{.VENV}}/pyvenv.cfg"
+
+  lint:
+    desc: Lint with ruff
+    deps: [install]
+    cmds:
+      - uv run ruff check {{.SRC}} {{.TESTS}}
+
+  format:
+    desc: Format with ruff
+    deps: [install]
+    cmds:
+      - uv run ruff format {{.SRC}} {{.TESTS}}
+
+  format:check:
+    desc: Check formatting without modifying files
+    deps: [install]
+    cmds:
+      - uv run ruff format --check {{.SRC}} {{.TESTS}}
+
+  typecheck:
+    desc: Type-check with pyright
+    deps: [install]
+    cmds:
+      - uv run pyright
+
+  build:
+    desc: Build Docker image (tag {{.IMAGE}})
+    cmds:
+      - "{{.DOCKER}} build -t {{.IMAGE}} ."
+
+  test:
+    desc: Run unit tests with pytest
+    deps: [install]
+    cmds:
+      - uv run pytest {{.TESTS}} --ignore={{.TESTS}}/integration -v
+
+  test:cov:
+    desc: Run unit tests with coverage report
+    deps: [install]
+    cmds:
+      - uv run pytest {{.TESTS}} --ignore={{.TESTS}}/integration -v --cov={{.SRC}} --cov-report=term-missing
+
+  check:
+    desc: Run lint, format check, typecheck, and tests
+    cmds:
+      - task: lint
+      - task: format:check
+      - task: typecheck
+      - task: test
