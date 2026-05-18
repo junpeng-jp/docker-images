@@ -48,8 +48,9 @@ jobs:
 
       - name: Pre-build checks for ${{ matrix.name }}
         run: |
-          if [ -f "${{ matrix.name }}/github/pre-build.sh" ]; then
-            bash "${{ matrix.name }}/github/pre-build.sh"
+          if [ -f "${{ matrix.name }}/.github/pre-build.sh" ]; then
+            cd "${{ matrix.name }}"
+            bash .github/pre-build.sh
           fi
 
       - uses: docker/setup-buildx-action@v3
@@ -86,7 +87,8 @@ jobs:
       - name: Pre-build checks for ${{ matrix.name }}
         run: |
           if [ -f "${{ matrix.name }}/github/pre-build.sh" ]; then
-            bash "${{ matrix.name }}/github/pre-build.sh"
+            cd "${{ matrix.name }}"
+            bash github/pre-build.sh
           fi
 
       - uses: docker/login-action@v3
