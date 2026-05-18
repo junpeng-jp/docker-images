@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from ha_gitops_sidecar.config import ServerConfig, StatusResult, SyncResult
 
 from ha_gitops_sidecar.filesystem import HomeAssistantFS, RepoCorruptedError, RepoNotClonedError, validate_repo
-from ha_gitops_sidecar.git import GitController
+from ha_gitops_sidecar.git import GitController, GitError
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +73,11 @@ class GitOpsServerImpl:
                 else:
                     self._git.fetch(self.git_remote, self.branch, cwd=repo_dir)
                     self._git.reset(f"{self.git_remote}/{self.branch}", cwd=repo_dir, hard=True)
+
                 self._ha_fs.validate_dirs(self.managed_dirs, src_root=repo_dir)
                 self._ha_fs.copy_dirs(self.managed_dirs, src_root=repo_dir)
                 sha = self._git.rev_parse("HEAD", cwd=repo_dir)
+
                 result: SyncResult = {
                     "success": True,
                     "timestamp": current_time.isoformat(),
@@ -83,7 +85,11 @@ class GitOpsServerImpl:
                     "error": None,
                 }
             except Exception as exc:
-                logger.error("sync failed: %s", exc)
+                if isinstance(exc, GitError) and exc.stderr:
+                    logger.error("sync failed: %s | stderr: %s", exc, exc.stderr)
+                else:
+                    logger.error("sync failed: %s", exc)
+
                 result = {
                     "success": False,
                     "timestamp": current_time.isoformat(),
@@ -93,15 +99,14 @@ class GitOpsServerImpl:
 
             self._last_result = result
             if not result["success"]:
-                raise HttpException(422, cast(dict, result))
+                raise HttpException(500, cast(dict, result))
 
             return result
 
     def status(self) -> StatusResult:
         last = self._last_result
-        if last is None:
-            raise HttpException(503, {"has_run": False, "last": None})
-        if not last["success"]:
-            raise HttpException(503, {"has_run": True, "last": last})
-
-        return {"has_run": True, "last": last}
+        return {
+            "repo": self._config["app"]["repo_url"],
+            "commit_hash": last["sha"] if last is not None else None,
+            "last_updated": last["timestamp"] if last is not None else None,
+        }

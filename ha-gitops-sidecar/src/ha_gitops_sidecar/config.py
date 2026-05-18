@@ -48,8 +48,9 @@ class SyncResult(TypedDict):
 
 
 class StatusResult(TypedDict):
-    has_run: bool
-    last: SyncResult | None
+    repo: str
+    commit_hash: str | None
+    last_updated: str | None
 
 
 class ConfigError(ValueError):

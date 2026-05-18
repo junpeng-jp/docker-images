@@ -35,6 +35,8 @@ def test_sync_repo_init(make_impl, mock_git_run, frozen_dt, mocker, exc_cls, exp
     mock_git_run.assert_any_call(
         ["git", "clone", "--branch", "main", "--depth", "1", "git@github.com:example/repo.git", _REPO_DIR],
         check=True,
+        capture_output=True,
+        text=True,
     )
 
 
@@ -47,10 +49,14 @@ def test_sync_repo_existing(make_impl, mock_git_run, frozen_dt, mocker):
     mock_git_run.assert_any_call(
         ["git", "-C", _REPO_DIR, "fetch", "origin", "main"],
         check=True,
+        capture_output=True,
+        text=True,
     )
     mock_git_run.assert_any_call(
         ["git", "-C", _REPO_DIR, "reset", "--hard", "origin/main"],
         check=True,
+        capture_output=True,
+        text=True,
     )
 
 
@@ -78,7 +84,7 @@ def test_sync_subprocess_raises(make_impl, frozen_dt, mocker):
     with pytest.raises(HttpException) as exc_info:
         make_impl().sync()
 
-    assert exc_info.value.status_code == 422
+    assert exc_info.value.status_code == 500
     assert exc_info.value.body["success"] is False
     assert exc_info.value.body["sha"] is None
     assert exc_info.value.body["error"] is not None
@@ -92,18 +98,18 @@ def test_sync_validation_failure_aborts_copy(make_impl, mock_git_run, frozen_dt,
     with pytest.raises(HttpException) as exc_info:
         impl.sync()
 
-    assert exc_info.value.status_code == 422
+    assert exc_info.value.status_code == 500
     assert exc_info.value.body["success"] is False
     assert "YAML parse error" in exc_info.value.body["error"]
     mock_copy.assert_not_called()
 
 
 def test_status_no_run(make_impl):
-    with pytest.raises(HttpException) as exc_info:
-        make_impl().status()
+    result = make_impl().status()
 
-    assert exc_info.value.status_code == 503
-    assert exc_info.value.body == {"has_run": False, "last": None}
+    assert result["repo"] == "git@github.com:example/repo.git"
+    assert result["commit_hash"] is None
+    assert result["last_updated"] is None
 
 
 def test_status_after_success(make_impl, mock_git_run, frozen_dt):
@@ -111,8 +117,9 @@ def test_status_after_success(make_impl, mock_git_run, frozen_dt):
     impl.sync()
     result = impl.status()
 
-    assert result["has_run"] is True
-    assert result["last"]["success"] is True
+    assert result["repo"] == "git@github.com:example/repo.git"
+    assert result["commit_hash"] is not None
+    assert result["last_updated"] is not None
 
 
 def test_status_after_failure(make_impl, frozen_dt, mocker):
@@ -122,9 +129,8 @@ def test_status_after_failure(make_impl, frozen_dt, mocker):
     with pytest.raises(HttpException):
         impl.sync()
 
-    with pytest.raises(HttpException) as exc_info:
-        impl.status()
+    result = impl.status()
 
-    assert exc_info.value.status_code == 503
-    assert exc_info.value.body["has_run"] is True
-    assert exc_info.value.body["last"]["success"] is False
+    assert result["repo"] == "git@github.com:example/repo.git"
+    assert result["commit_hash"] is None
+    assert result["last_updated"] is not None

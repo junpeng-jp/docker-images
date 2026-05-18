@@ -7,12 +7,12 @@ import signal
 import sys
 import threading
 
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any
-from collections.abc import Mapping
+from http.server import HTTPServer
 
 from ha_gitops_sidecar.config import ConfigError, ServerConfig, load_config
-from ha_gitops_sidecar.server import GitOpsServerImpl, HttpException
+from ha_gitops_sidecar.server import GitOpsServerImpl
+from ha_gitops_sidecar.handler import GitOpsHandler
+
 
 logger = logging.getLogger(__name__)
 
@@ -34,41 +34,6 @@ def configure_logging(level: str) -> None:
     handler.setFormatter(_JsonFormatter())
     logging.root.handlers = [handler]
     logging.root.setLevel(level)
-
-
-class GitOpsHandler(BaseHTTPRequestHandler):
-    impl: GitOpsServerImpl
-
-    def do_GET(self) -> None:
-        try:
-            if self.path == "/health":
-                self._send_json(200, {"status": "ok"})
-            elif self.path == "/status":
-                self._send_json(200, self.impl.status())
-            else:
-                self._send_json(404, {"error": "not found"})
-        except HttpException as exc:
-            self._send_json(exc.status_code, exc.body)
-
-    def do_POST(self) -> None:
-        try:
-            if self.path == "/webhook/sync":
-                self._send_json(200, self.impl.sync())
-            else:
-                self._send_json(404, {"error": "not found"})
-        except HttpException as exc:
-            self._send_json(exc.status_code, exc.body)
-
-    def _send_json(self, code: int, body: Mapping[str, Any]) -> None:
-        payload = json.dumps(body).encode()
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(payload)))
-        self.end_headers()
-        self.wfile.write(payload)
-
-    def log_message(self, format: str, *args: object) -> None:
-        logger.info("http request: %s", format % args)
 
 
 def main() -> None:

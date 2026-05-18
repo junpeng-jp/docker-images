@@ -19,4 +19,11 @@ if ! command -v task &>/dev/null; then
   export PATH="$HOME/.local/bin:$PATH"
 fi
 
+VERSION_FILE="$(cat VERSION)"
+PYPROJECT_VERSION="$(grep '^version' pyproject.toml | sed 's/version = "\(.*\)"/\1/')"
+if [ "$VERSION_FILE" != "$PYPROJECT_VERSION" ]; then
+  echo "Error: VERSION file ($VERSION_FILE) does not match pyproject.toml version ($PYPROJECT_VERSION)"
+  exit 1
+fi
+
 task check

@@ -43,26 +43,36 @@ def _post(live_server, path):
     return resp.status, resp.getheader("Content-Type"), json.loads(resp.read())
 
 
-def test_health(live_server):
+def test_health(live_server, mock_impl):
+    mock_impl.health.return_value = {"status": "ok"}
     status, ct, body = _get(live_server, "/health")
     assert status == 200
     assert ct == "application/json"
     assert body == {"status": "ok"}
 
 
-def test_status_success(live_server, mock_impl):
-    mock_impl.status.return_value = {"has_run": True, "last": {"success": True}}
+def test_status_after_sync(live_server, mock_impl):
+    mock_impl.status.return_value = {
+        "repo": "git@github.com:org/repo.git",
+        "commit_hash": "abc123",
+        "last_updated": "2024-01-01T00:00:00+00:00",
+    }
     status, ct, body = _get(live_server, "/status")
     assert status == 200
     assert ct == "application/json"
-    assert body == {"has_run": True, "last": {"success": True}}
+    assert body == {
+        "repo": "git@github.com:org/repo.git",
+        "commit_hash": "abc123",
+        "last_updated": "2024-01-01T00:00:00+00:00",
+    }
 
 
-def test_status_failure(live_server, mock_impl):
-    mock_impl.status.side_effect = HttpException(503, {"has_run": False, "last": None})
+def test_status_not_yet_run(live_server, mock_impl):
+    mock_impl.status.return_value = {"repo": "git@github.com:org/repo.git", "commit_hash": None, "last_updated": None}
     status, ct, body = _get(live_server, "/status")
-    assert status == 503
-    assert body == {"has_run": False, "last": None}
+    assert status == 200
+    assert ct == "application/json"
+    assert body == {"repo": "git@github.com:org/repo.git", "commit_hash": None, "last_updated": None}
 
 
 def test_sync_success(live_server, mock_impl):
@@ -76,9 +86,9 @@ def test_sync_success(live_server, mock_impl):
 
 def test_sync_failure(live_server, mock_impl):
     error_body = {"success": False, "timestamp": "2024-01-01T00:00:00+00:00", "sha": None, "error": "git failed"}
-    mock_impl.sync.side_effect = HttpException(422, error_body)
+    mock_impl.sync.side_effect = HttpException(500, error_body)
     status, ct, body = _post(live_server, "/webhook/sync")
-    assert status == 422
+    assert status == 500
     assert body == error_body
 
 
