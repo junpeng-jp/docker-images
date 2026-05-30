@@ -15,6 +15,10 @@ build_matrix() {
     return
   fi
   echo "$dirs" | while IFS= read -r dir; do
+    if [ ! -d "$dir" ]; then
+      echo "  ${dir} → deleted, skipping" >&2
+      continue
+    fi
     version=$(tr -d '[:space:]' < "$dir/VERSION")
     echo "  ${dir} → ${version}" >&2
     printf '%s' "$dir" | jq -R --arg v "$version" '{"name": ., "version": $v}'
