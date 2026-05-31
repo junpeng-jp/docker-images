@@ -69,7 +69,7 @@ jobs:
         run: |
           {
             echo "annotations<<EOF"
-            cat "${{ matrix.name }}/annotations" 2>/dev/null || true
+            bash .github/scripts/read_annotations.sh "${{ matrix.name }}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -85,7 +85,6 @@ jobs:
 
       - name: Verify annotations
         run: |
-          annotations_file="${{ matrix.name }}/annotations"
           actual=$(docker buildx imagetools inspect \
             localhost:5000/${{ matrix.name }}:${{ matrix.version }} \
             --raw | jq '.annotations // {}')
@@ -97,6 +96,8 @@ jobs:
           failed=0
           while IFS= read -r line || [ -n "$line" ]; do
             [ -z "$line" ] && continue
+            # Strip level prefix to get bare key=value
+            [[ "$line" == *:*=* ]] && line="${line#*:}"
             key="${line%%=*}"
             value="${line#*=}"
             actual_value=$(echo "$actual" | jq -r --arg k "$key" '.[$k] // empty')
@@ -106,7 +107,7 @@ jobs:
               echo "FAIL: $key — expected '$value', got '$actual_value'"
               failed=1
             fi
-          done < "$annotations_file"
+          done < <(bash .github/scripts/read_annotations.sh "${{ matrix.name }}")
 
           if [ "$failed" -eq 1 ]; then
             echo "Annotation verification failed"
@@ -159,7 +160,7 @@ jobs:
         run: |
           {
             echo "annotations<<EOF"
-            cat "${{ matrix.name }}/annotations" 2>/dev/null || true
+            bash .github/scripts/read_annotations.sh "${{ matrix.name }}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
