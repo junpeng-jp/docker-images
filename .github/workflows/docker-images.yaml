@@ -40,6 +40,11 @@ jobs:
     needs: detect
     if: needs.detect.outputs.has_changes == 'true' && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
     strategy:
       matrix: ${{ fromJson(needs.detect.outputs.matrix) }}
       fail-fast: false
@@ -56,14 +61,59 @@ jobs:
       - uses: docker/setup-qemu-action@v3
 
       - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
 
-      - name: Build ${{ matrix.name }}:${{ matrix.version }}
+      - name: Read chart annotations
+        id: meta
+        run: |
+          {
+            echo "annotations<<EOF"
+            bash .github/scripts/read_annotations.sh "${{ matrix.name }}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push ${{ matrix.name }}:${{ matrix.version }} to local registry
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.name }}
           platforms: linux/amd64,linux/arm64
-          push: false
+          push: true
           build-args: VERSION=${{ matrix.version }}
+          tags: localhost:5000/${{ matrix.name }}:${{ matrix.version }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+
+      - name: Verify annotations
+        run: |
+          actual=$(docker buildx imagetools inspect \
+            localhost:5000/${{ matrix.name }}:${{ matrix.version }} \
+            --raw | jq '.annotations // {}')
+
+          echo "=== Actual Annotations ==="
+          echo "$actual"
+
+          echo "=== Verification ==="
+          failed=0
+          while IFS= read -r line || [ -n "$line" ]; do
+            [ -z "$line" ] && continue
+            # Strip level prefix to get bare key=value
+            [[ "$line" == *:*=* ]] && line="${line#*:}"
+            key="${line%%=*}"
+            value="${line#*=}"
+            actual_value=$(echo "$actual" | jq -r --arg k "$key" '.[$k] // empty')
+            if [ "$actual_value" = "$value" ]; then
+              echo "PASS: $key"
+            else
+              echo "FAIL: $key — expected '$value', got '$actual_value'"
+              failed=1
+            fi
+          done < <(bash .github/scripts/read_annotations.sh "${{ matrix.name }}")
+
+          if [ "$failed" -eq 1 ]; then
+            echo "Annotation verification failed"
+            exit 1
+          fi
+          echo "All annotations verified"
 
   check-all-passed:
     needs: check
@@ -105,6 +155,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Read chart annotations
+        id: meta
+        run: |
+          {
+            echo "annotations<<EOF"
+            bash .github/scripts/read_annotations.sh "${{ matrix.name }}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and push ${{ matrix.name }}:${{ matrix.version }}
         uses: docker/build-push-action@v6
         env:
@@ -118,3 +177,4 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ matrix.version }}
             ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:latest
+          annotations: ${{ steps.meta.outputs.annotations }}

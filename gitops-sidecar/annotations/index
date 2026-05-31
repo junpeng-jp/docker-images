@@ -1,0 +1,3 @@
+org.opencontainers.image.title=gitops-sidecar
+org.opencontainers.image.source=https://github.com/junpeng-jp/gitops-sidecar
+org.opencontainers.image.documentation=https://github.com/junpeng-jp/gitops-sidecar#readme
