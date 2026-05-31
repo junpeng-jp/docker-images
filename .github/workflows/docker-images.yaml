@@ -80,8 +80,33 @@ jobs:
         run: |
           mkdir /tmp/image
           tar -xf /tmp/image.tar -C /tmp/image
-          echo "=== Annotations ==="
-          jq '.annotations // {}' /tmp/image/index.json
+
+          annotations_file="${{ matrix.name }}/annotations"
+          actual=$(jq '.annotations // {}' /tmp/image/index.json)
+
+          echo "=== Actual Annotations ==="
+          echo "$actual"
+
+          echo "=== Verification ==="
+          failed=0
+          while IFS= read -r line || [ -n "$line" ]; do
+            [ -z "$line" ] && continue
+            key="${line%%=*}"
+            value="${line#*=}"
+            actual_value=$(echo "$actual" | jq -r --arg k "$key" '.[$k] // empty')
+            if [ "$actual_value" = "$value" ]; then
+              echo "PASS: $key"
+            else
+              echo "FAIL: $key — expected '$value', got '$actual_value'"
+              failed=1
+            fi
+          done < "$annotations_file"
+
+          if [ "$failed" -eq 1 ]; then
+            echo "Annotation verification failed"
+            exit 1
+          fi
+          echo "All annotations verified"
 
   check-all-passed:
     needs: check
