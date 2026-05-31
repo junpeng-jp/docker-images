@@ -105,6 +105,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Read chart annotations
+        id: meta
+        run: |
+          {
+            echo "annotations<<EOF"
+            cat "${{ matrix.name }}/annotations" 2>/dev/null || true
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and push ${{ matrix.name }}:${{ matrix.version }}
         uses: docker/build-push-action@v6
         env:
@@ -118,3 +127,4 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ matrix.version }}
             ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:latest
+          annotations: ${{ steps.meta.outputs.annotations }}
